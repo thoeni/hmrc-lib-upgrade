@@ -9,6 +9,7 @@ import (
 	"github.com/fatih/color"
 	"sync"
 	"time"
+	"flag"
 )
 
 type bintrayResp struct {
@@ -21,17 +22,21 @@ func main() {
 
 	start := time.Now()
 
+	filename := flag.String("file", "", "Filename to parse in the current dir, i.e. -file=MicroServiceBuild.scala")
+	flag.Parse()
+
+	if *filename == "" {
+		fmt.Println("Filename must be specified via -file= flag.")
+		return
+	}
+
 	var errors []string = make([]string, 0, 0)
-
-	fmt.Printf("|%30s|%10s|%10s|%8s|\n", "Library", "Current", "Latest", "Update")
-	fmt.Printf("|------------------------------|----------|----------|--------|\n")
-
 	var libs chan []string = make(chan []string)
 
 	go func(){
 		r, _ := regexp.Compile("uk.gov.hmrc\".*?%%.*?\"(.*?)\".*?%.*?\"(.*?)\"")
 
-		b, err := ioutil.ReadFile("./MicroServiceBuild.scala")
+		b, err := ioutil.ReadFile(*filename)
 		if err != nil {
 			fmt.Println("Couldn't open file:", err)
 		}
@@ -44,6 +49,10 @@ func main() {
 		close(libs)
 	}()
 
+	fmt.Printf("|%30s|%10s|%10s|%8s|\n", "Library", "Current", "Latest", "Update")
+	fmt.Printf("|------------------------------|----------|----------|--------|\n")
+
+	wg.Add(1)
 	for lib := range libs {
 		go func(lib []string, wg *sync.WaitGroup) {
 			wg.Add(1)
@@ -78,10 +87,12 @@ func main() {
 		}(lib, &wg)
 	}
 
+	wg.Done()
 	wg.Wait()
 
+	fmt.Printf("|------------------------------|----------|----------|--------|\n")
 	fmt.Printf("\nElapsed:%s\n\nErrors:\n", time.Since(start))
 	for i, e := range errors {
-		fmt.Printf("[%d] %s", i+1, e)
+		fmt.Printf("[%d] %s\n", i+1, e)
 	}
 }
