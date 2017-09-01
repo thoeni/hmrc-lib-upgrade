@@ -14,12 +14,14 @@ import (
 
 type bintrayResp struct {
 	Name string
+	Updated string
 }
 
 var wg sync.WaitGroup
 
 func main() {
 
+	dateLayout := "2006-01-02T15:04:05.000Z"
 	start := time.Now()
 
 	filename := flag.String("file", "", "Filename to parse in the current dir, i.e. -file=MicroServiceBuild.scala")
@@ -49,8 +51,8 @@ func main() {
 		close(libs)
 	}()
 
-	fmt.Printf("|%30s|%10s|%10s|%8s|\n", "Library", "Current", "Latest", "Update")
-	fmt.Printf("|------------------------------|----------|----------|--------|\n")
+	fmt.Printf("|%30s|%10s|%10s|%12s|%8s|\n", "Library", "Current", "Latest", "On", "Update")
+	fmt.Printf("|------------------------------|----------|----------|------------|--------|\n")
 
 	wg.Add(1)
 	for lib := range libs {
@@ -77,10 +79,12 @@ func main() {
 				errors = append(errors, fmt.Sprintln("Error while unmarshalling", string(b), err))
 			}
 
+			upd, _ := time.Parse(dateLayout, gr.Updated)
+
 			switch {
-			case gr.Name == "": color.Yellow("|%30s|%10s|%10s|%8s|\n", libName, libCurVersion, fmt.Sprintf("err[%d]", len(errors)), "")
-			case gr.Name > lib[2]: color.Red("|%30s|%10s|%10s|%8s|\n", libName, libCurVersion, gr.Name, "[*]")
-			default: color.Green("|%30s|%10s|%10s|%8s|\n", libName, libCurVersion, gr.Name, "")
+			case gr.Name == "": color.Yellow("|%30s|%10s|%10s|%12s|%8s|\n", libName, libCurVersion, fmt.Sprintf("err[%d]", len(errors)), "", "")
+			case gr.Name > lib[2]: color.Red("|%30s|%10s|%10s|%12s|%8s|\n", libName, libCurVersion, gr.Name, upd.Format("2006-01-02"), "[*]")
+			default: color.Green("|%30s|%10s|%10s|%12s|%8s|\n", libName, libCurVersion, gr.Name, upd.Format("2006-01-02"), "")
 			}
 
 			wg.Done()
@@ -90,7 +94,7 @@ func main() {
 	wg.Done()
 	wg.Wait()
 
-	fmt.Printf("|------------------------------|----------|----------|--------|\n")
+	fmt.Printf("|------------------------------|----------|----------|------------|--------|\n")
 	fmt.Printf("\nElapsed:%s\n\nErrors:\n", time.Since(start))
 	for i, e := range errors {
 		fmt.Printf("[%d] %s\n", i+1, e)
