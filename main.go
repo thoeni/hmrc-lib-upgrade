@@ -13,34 +13,28 @@ import (
 	"time"
 	"flag"
 	"sort"
+	"sync/atomic"
 )
 
 type searchResp struct {
-	Source string
-	Name string
+	Source  string
+	Name    string
 	Updated string
 }
 
+const (
+	dateLayout string = "2006-01-02T15:04:05.000Z"
+)
+
 var wg sync.WaitGroup
-const (dateLayout string = "2006-01-02T15:04:05.000Z")
-var httpClient http.Client
+var wgErr sync.WaitGroup
 var remove map[string]interface{}
 var migration *bool
+var counter uint32
 
 func main() {
 
 	start := time.Now()
-
-	var migrationLibs = []string{"http-verbs", "play-auditing", "play-graphite", "play-config", "play-authorisation", "play-authorised-frontend", "play-health", "crypto", "logback-json-logger", "play-json-logger", "govuk-template", "play-ui"}
-	remove = make(map[string]interface{})
-	for _, l := range migrationLibs {
-		remove[l] = nil
-	}
-
-	timeout := time.Duration(1 * time.Second)
-	httpClient = http.Client{
-		Timeout: timeout,
-	}
 
 	filename := flag.String("file", "", "Filename to parse in the current dir, i.e. -file=MicroServiceBuild.scala")
 	migration = flag.Bool("migration", false, "If present will highlight libraries to be removed for library upgrade")
@@ -51,8 +45,22 @@ func main() {
 		return
 	}
 
-	var errors []string = make([]string, 0, 0)
+	var migrationLibs = []string{"http-verbs", "play-auditing", "play-graphite", "play-config", "play-authorisation", "play-authorised-frontend", "play-health", "crypto", "logback-json-logger", "play-json-logger", "govuk-template", "play-ui"}
+	remove = make(map[string]interface{})
+	for _, l := range migrationLibs {
+		remove[l] = nil
+	}
+
+	timeout := time.Duration(2 * time.Second)
+	httpClient := http.Client{
+		Timeout: timeout,
+	}
+
+	var errors chan string = make(chan string)
 	var libs chan []string = make(chan []string)
+	var errs = make([]string, 0, 0)
+
+	go errorProc(&errors, &errs, &wgErr)
 
 	go getLibraries(*filename, &libs)
 
@@ -62,23 +70,35 @@ func main() {
 
 	wg.Add(1)
 	for lib := range libs {
-		go getLatestVersion(lib, &errors, &wg)
+		go getLatestVersion(&httpClient, lib, &errors, &wg)
 	}
+
 	wg.Done()
 	wg.Wait()
+	close(errors)
 
 	fmt.Printf("|------------------------------|----------|----------|----------|------------|\n")
 	printHelp()
 	fmt.Printf("\nElapsed:%s\n", time.Since(start))
-	if len(errors) != 0 {
-		fmt.Printf("\nErrors:\n")
-		for i, e := range errors {
-			fmt.Printf("[%d] %s\n", i+1, e)
+
+	wgErr.Wait()
+	if len(errs) != 0 {
+		fmt.Println("\nErrors:\n")
+		for _, e := range errs {
+			fmt.Println(e)
 		}
 	}
 }
 
-func getLibraries(filename string, libs *chan []string){
+func errorProc(errCh *chan string, errors *[]string, wg *sync.WaitGroup) {
+	wg.Add(1)
+	for e := range *errCh {
+		*errors = append(*errors, e)
+	}
+	wg.Done()
+}
+
+func getLibraries(filename string, libs *chan []string) {
 	r, _ := regexp.Compile("uk.gov.hmrc\".*?%%.*?\"(.*?)\".*?%.*?\"(.*?)\"")
 
 	b, err := ioutil.ReadFile(filename)
@@ -94,7 +114,7 @@ func getLibraries(filename string, libs *chan []string){
 	close(*libs)
 }
 
-func getLatestVersion(lib []string, errors *[]string, wg *sync.WaitGroup) {
+func getLatestVersion(httpClient *http.Client, lib []string, errors *chan string, wg *sync.WaitGroup) {
 	wg.Add(1)
 	defer wg.Done()
 	libName := lib[1]
@@ -103,22 +123,23 @@ func getLatestVersion(lib []string, errors *[]string, wg *sync.WaitGroup) {
 	var resp = searchResp{}
 	var err error
 
-	resp, err = getFromBintray(libName)
+	var errId uint32
+
+	resp, err = getFromBintray(httpClient, libName)
 	if err != nil {
-		if err.Error() != "[404]" {
-			*errors = append(*errors, fmt.Sprintf("%s [%s]\n\tCouldn't get version because of error %v", libName, libCurVersion, err))
-		} else {
-			resp, err = getFromNexus(libName)
-			if err != nil {
-				*errors = append(*errors, fmt.Sprintf("%s [%s]\n\tCouldn't get version because of error %v", libName, libCurVersion, err))
-			}
+		errId = atomic.AddUint32(&counter, 1)
+		if err.Error() == "[404]" {
+			resp, err = getFromNexus(httpClient, libName)
+		}
+		if err != nil {
+			*errors <- fmt.Sprintf("[%d] - %s [%s]\n\tCouldn't get version because of error %v", errId, libName, libCurVersion, err)
 		}
 	}
 
-	printLine(libName, libCurVersion, resp, len(*errors))
+	printLine(libName, libCurVersion, resp, int(errId))
 }
 
-func getFromBintray(libName string) (searchResp, error) {
+func getFromBintray(httpClient *http.Client, libName string) (searchResp, error) {
 	url := fmt.Sprintf("https://api.bintray.com/packages/hmrc/releases/%s/versions/_latest", libName)
 	r, err := httpClient.Get(url)
 	if err != nil {
@@ -143,7 +164,7 @@ func getFromBintray(libName string) (searchResp, error) {
 	return resp, nil
 }
 
-func getFromNexus(libName string) (searchResp, error) {
+func getFromNexus(httpClient *http.Client, libName string) (searchResp, error) {
 	url := fmt.Sprintf("https://nexus-dev.tax.service.gov.uk/content/repositories/hmrc-releases/uk/gov/hmrc/%s_2.11/", libName)
 	r, err := httpClient.Get(url)
 	if err != nil {
@@ -180,7 +201,7 @@ func parseLatestNexus(body []byte) (searchResp, error) {
 
 	return searchResp{
 		Source: "Nexus",
-		Name: versions[len(versions)-1].String(),
+		Name:   versions[len(versions)-1].String(),
 	}, nil
 }
 
@@ -188,20 +209,25 @@ func printLine(libName string, libCurVersion string, br searchResp, errId int) {
 
 	libLatestVersion := br.Name
 	libLatestUpdate, _ := time.Parse(dateLayout, br.Updated)
-	updFmt := func() string {
-		if br.Updated != "" {
-			return libLatestUpdate.Format("2006-01-02")
-		}
-		return ""
-	}()
+	updFmt := ""
+	if br.Updated != "" {
+		updFmt = libLatestUpdate.Format("2006-01-02")
+	}
 
 	_, exists := remove[libName]
 
+	lV, _ := version.NewVersion(libLatestVersion)
+	cV, _ := version.NewVersion(libCurVersion)
+
 	switch {
-	case *migration && exists: color.Magenta("|%30s|%10s|%10s|%10s|%12s|\n", libName, libCurVersion, libLatestVersion, br.Source, updFmt)
-	case libLatestVersion == "": color.Yellow("|%30s|%10s|%10s|%10s|%12s|\n", libName, libCurVersion, fmt.Sprintf("err[%d]", errId), "", "")
-	case libLatestVersion > libCurVersion: color.Red("|%30s|%10s|%10s|%10s|%12s|\n", libName, libCurVersion, libLatestVersion, br.Source, updFmt)
-	default: color.Green("|%30s|%10s|%10s|%10s|%12s|\n", libName, libCurVersion, libLatestVersion, br.Source, "")
+	case *migration && exists:
+		color.Magenta("|%30s|%10s|%10s|%10s|%12s|\n", libName, libCurVersion, libLatestVersion, br.Source, updFmt)
+	case libLatestVersion == "":
+		color.Yellow("|%30s|%10s|%10s|%10s|%12s|\n", libName, libCurVersion, fmt.Sprintf("err[%d]", errId), "", "")
+	case cV.LessThan(lV):
+		color.Red("|%30s|%10s|%10s|%10s|%12s|\n", libName, libCurVersion, libLatestVersion, br.Source, updFmt)
+	default:
+		color.Green("|%30s|%10s|%10s|%10s|%12s|\n", libName, libCurVersion, libLatestVersion, br.Source, "")
 	}
 }
 
@@ -210,5 +236,5 @@ func printHelp() {
 	color.Green(emoji.Sprint(":smile: Library up to date!"))
 	color.Red(emoji.Sprint(":anguished: Auch! Not the latest..."))
 	color.Yellow(emoji.Sprint(":disappointed: Something went wrong! VPN issues??? If the library is on Nexus I need to access it..."))
-	color.Magenta(emoji.Sprint(":construction_worker: To be removed for migration https://confluence.tools.tax.service.gov.uk/x/wJFhBQ"))
+	color.Magenta(emoji.Sprint(":construction: To be removed for migration https://confluence.tools.tax.service.gov.uk/x/wJFhBQ"))
 }
