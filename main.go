@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"github.com/fatih/color"
 	"github.com/hashicorp/go-version"
+	"github.com/kyokomi/emoji"
 	"sync"
 	"time"
 	"flag"
@@ -21,12 +22,20 @@ type searchResp struct {
 }
 
 var wg sync.WaitGroup
-const dateLayout string = "2006-01-02T15:04:05.000Z"
+const (dateLayout string = "2006-01-02T15:04:05.000Z")
 var httpClient http.Client
+var remove map[string]interface{}
+var migration *bool
 
 func main() {
 
 	start := time.Now()
+
+	var migrationLibs = []string{"http-verbs", "play-auditing", "play-graphite", "play-config", "play-authorisation", "play-authorised-frontend", "play-health", "crypto", "logback-json-logger", "play-json-logger", "govuk-template", "play-ui"}
+	remove = make(map[string]interface{})
+	for _, l := range migrationLibs {
+		remove[l] = nil
+	}
 
 	timeout := time.Duration(1 * time.Second)
 	httpClient = http.Client{
@@ -34,6 +43,7 @@ func main() {
 	}
 
 	filename := flag.String("file", "", "Filename to parse in the current dir, i.e. -file=MicroServiceBuild.scala")
+	migration = flag.Bool("migration", false, "If present will highlight libraries to be removed for library upgrade")
 	flag.Parse()
 
 	if *filename == "" {
@@ -46,6 +56,7 @@ func main() {
 
 	go getLibraries(*filename, &libs)
 
+	fmt.Printf("\n|------------------------------|----------|----------|----------|------------|\n")
 	fmt.Printf("|%30s|%10s|%10s|%10s|%12s|\n", "Library", "Current", "Latest", "On", "Updated")
 	fmt.Printf("|------------------------------|----------|----------|----------|------------|\n")
 
@@ -57,9 +68,13 @@ func main() {
 	wg.Wait()
 
 	fmt.Printf("|------------------------------|----------|----------|----------|------------|\n")
-	fmt.Printf("\nElapsed:%s\n\nErrors:\n", time.Since(start))
-	for i, e := range errors {
-		fmt.Printf("[%d] %s\n", i+1, e)
+	printHelp()
+	fmt.Printf("\nElapsed:%s\n", time.Since(start))
+	if len(errors) != 0 {
+		fmt.Printf("\nErrors:\n")
+		for i, e := range errors {
+			fmt.Printf("[%d] %s\n", i+1, e)
+		}
 	}
 }
 
@@ -180,9 +195,20 @@ func printLine(libName string, libCurVersion string, br searchResp, errId int) {
 		return ""
 	}()
 
+	_, exists := remove[libName]
+
 	switch {
+	case *migration && exists: color.Magenta("|%30s|%10s|%10s|%10s|%12s|\n", libName, libCurVersion, libLatestVersion, br.Source, updFmt)
 	case libLatestVersion == "": color.Yellow("|%30s|%10s|%10s|%10s|%12s|\n", libName, libCurVersion, fmt.Sprintf("err[%d]", errId), "", "")
 	case libLatestVersion > libCurVersion: color.Red("|%30s|%10s|%10s|%10s|%12s|\n", libName, libCurVersion, libLatestVersion, br.Source, updFmt)
 	default: color.Green("|%30s|%10s|%10s|%10s|%12s|\n", libName, libCurVersion, libLatestVersion, br.Source, "")
 	}
+}
+
+func printHelp() {
+	fmt.Printf("\nSo colorful! What does it mean?\n")
+	color.Green(emoji.Sprint(":smile: Library up to date!"))
+	color.Red(emoji.Sprint(":anguished: Auch! Not the latest..."))
+	color.Yellow(emoji.Sprint(":disappointed: Something went wrong! VPN issues??? If the library is on Nexus I need to access it..."))
+	color.Magenta(emoji.Sprint(":construction_worker: To be removed for migration https://confluence.tools.tax.service.gov.uk/x/wJFhBQ"))
 }
