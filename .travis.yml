@@ -1,0 +1,21 @@
+language: go
+go:
+- master
+install:
+  - go get -t -d -v ./...
+  - go get github.com/mitchellh/gox
+sudo: required
+before_deploy:
+  - gox -ldflags "-X main.AppVersion=$TRAVIS_TAG -X main.Sha=$TRAVIS_COMMIT" -output "dist/hmrc-lib-upgrade-{{.OS}}-{{.Arch}}"
+  - sudo chmod +x ./dist/*
+deploy:
+  provider: releases
+  api_key:
+    secure: RJGcKvSdozlWqRUdgY1VHzOsPuK1G9IumWvG3SrNClLPYiYNjQA/OpUZHciQQDF8VuBdFuZki8M6z4ypyBllW4NyQBykVJaJ1kI9k7h23FBe8cqnfFZizm8Gl0fA7VcSRm+FfGZ3lT+GvXEBOETddDxCbDSWjKMhnH2Aooyrvy+5DOxKmXfdzsONbAtMS9bzZhYbUNEmRFgWIbXGAeBrnLtl/1J57tBICupP/4pOrmtacxlFvk8s9ibH80Lw1JXE0w2f5vrv5TmUbEQJAGro18PnaRzK1ow1KkP8D2KhVEnhdKlKLHz5+hZtJt7Omq3KhkMmICRmdtQx2AUa65/ty3UuC6dZn+XbGBuLFGcgnRTIWYAJKZ+Gvcxgpu3fePWiCfuwvAsM0gKjpcxlX11x7f79Zahv08oV3PsXYOCd2iTYz/mP7ziddHzxYkXUJQQ9YVEvYxR0nWb2RYjeH+E0VrlqBqXYBJ4c5ncKFPlOOjEh34Q2RuCfVhFvPkfimHxHdTLbfg2M1XhecGJXCzWpbxYGJbsH7Aj15QdFk0IvY8FXWp31jR7iLuzvHTTMXCvkRl0DnRYkAOHjCsmqvFiNH+2o0K5DmioBsjcT6lMHFqpcteUeL5ndofVxiijgN/ohGk7l63cogggL1pU5oyvNiJEEMCeCJRL8pZjkOQTzrA0=
+  file_glob: true
+  file: dist/*
+  skip_cleanup: true
+  on:
+    repo: thoeni/hmrc-lib-upgrade
+    tags: true
+    condition: "$TRAVIS_TAG =~ ^v[0-9]+(.[0-9]+)*"

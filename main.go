@@ -31,6 +31,8 @@ var wgErr sync.WaitGroup
 var remove map[string]interface{}
 var migration *bool
 var counter uint32
+var AppVersion string
+var Sha string
 
 var bintrayUrl = "https://api.bintray.com/packages/hmrc/releases/%s/versions/_latest"
 var nexusUrl = "https://nexus-dev.tax.service.gov.uk/content/repositories/hmrc-releases/uk/gov/hmrc/%s_2.11/"
@@ -40,8 +42,14 @@ func main() {
 	start := time.Now()
 
 	filename := flag.String("file", "", "Filename to parse in the current dir, i.e. -file=MicroServiceBuild.scala")
+	printVersion := flag.Bool("version", false, "Prints the version of this application")
 	migration = flag.Bool("migration", false, "If present will highlight libraries to be removed for library upgrade")
 	flag.Parse()
+
+	if *printVersion {
+		fmt.Printf("Current version is: %s\nGit commit: %s", AppVersion, Sha)
+		return
+	}
 
 	if *filename == "" {
 		fmt.Println("Filename must be specified via -file= flag.")
