@@ -32,6 +32,9 @@ var remove map[string]interface{}
 var migration *bool
 var counter uint32
 
+var bintrayUrl = "https://api.bintray.com/packages/hmrc/releases/%s/versions/_latest"
+var nexusUrl = "https://nexus-dev.tax.service.gov.uk/content/repositories/hmrc-releases/uk/gov/hmrc/%s_2.11/"
+
 func main() {
 
 	start := time.Now()
@@ -140,7 +143,7 @@ func getLatestVersion(httpClient *http.Client, lib []string, errors *chan string
 }
 
 func getFromBintray(httpClient *http.Client, libName string) (searchResp, error) {
-	url := fmt.Sprintf("https://api.bintray.com/packages/hmrc/releases/%s/versions/_latest", libName)
+	url := fmt.Sprintf(bintrayUrl, libName)
 	r, err := httpClient.Get(url)
 	if err != nil {
 		return searchResp{}, err
@@ -165,7 +168,7 @@ func getFromBintray(httpClient *http.Client, libName string) (searchResp, error)
 }
 
 func getFromNexus(httpClient *http.Client, libName string) (searchResp, error) {
-	url := fmt.Sprintf("https://nexus-dev.tax.service.gov.uk/content/repositories/hmrc-releases/uk/gov/hmrc/%s_2.11/", libName)
+	url := fmt.Sprintf(nexusUrl, libName)
 	r, err := httpClient.Get(url)
 	if err != nil {
 		return searchResp{}, err
@@ -205,12 +208,12 @@ func parseLatestNexus(body []byte) (searchResp, error) {
 	}, nil
 }
 
-func printLine(libName string, libCurVersion string, br searchResp, errId int) {
+func printLine(libName string, libCurVersion string, resp searchResp, errId int) {
 
-	libLatestVersion := br.Name
-	libLatestUpdate, _ := time.Parse(dateLayout, br.Updated)
+	libLatestVersion := resp.Name
+	libLatestUpdate, _ := time.Parse(dateLayout, resp.Updated)
 	updFmt := ""
-	if br.Updated != "" {
+	if resp.Updated != "" {
 		updFmt = libLatestUpdate.Format("2006-01-02")
 	}
 
@@ -221,13 +224,13 @@ func printLine(libName string, libCurVersion string, br searchResp, errId int) {
 
 	switch {
 	case *migration && exists:
-		color.Magenta("|%30s|%10s|%10s|%10s|%12s|\n", libName, libCurVersion, libLatestVersion, br.Source, updFmt)
+		color.Magenta("|%30s|%10s|%10s|%10s|%12s|\n", libName, libCurVersion, libLatestVersion, resp.Source, updFmt)
 	case libLatestVersion == "":
 		color.Yellow("|%30s|%10s|%10s|%10s|%12s|\n", libName, libCurVersion, fmt.Sprintf("err[%d]", errId), "", "")
 	case cV.LessThan(lV):
-		color.Red("|%30s|%10s|%10s|%10s|%12s|\n", libName, libCurVersion, libLatestVersion, br.Source, updFmt)
+		color.Red("|%30s|%10s|%10s|%10s|%12s|\n", libName, libCurVersion, libLatestVersion, resp.Source, updFmt)
 	default:
-		color.Green("|%30s|%10s|%10s|%10s|%12s|\n", libName, libCurVersion, libLatestVersion, br.Source, "")
+		color.Green("|%30s|%10s|%10s|%10s|%12s|\n", libName, libCurVersion, libLatestVersion, resp.Source, "")
 	}
 }
 
