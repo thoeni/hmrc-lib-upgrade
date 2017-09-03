@@ -6,7 +6,7 @@ deployment:
   release:
     tag: /^v[0-9]+(.[0-9]+)*/
     commands:
-      — go get github.com/mitchellh/gox
+      - go get github.com/mitchellh/gox
       - go get github.com/tcnksm/ghr
-      — gox -ldflags "-X main.AppVersion=$CIRCLE_TAG -X main.Sha=$CIRCLE_SHA1" -output "dist/hmrc-lib-upgrade-{{.OS}}-{{.Arch}}"
+      - gox -osarch="linux/386 linux/amd64 windows/386 windows/amd64 darwin/386 darwin/amd64" -ldflags "-X main.AppVersion=$CIRCLE_TAG -X main.Sha=$CIRCLE_SHA1" -output "dist/hmrc-lib-upgrade-{{.OS}}-{{.Arch}}"
       - ghr -t $GITHUB_TOKEN -u $CIRCLE_PROJECT_USERNAME -r $CIRCLE_PROJECT_REPONAME --replace $CIRCLE_TAG dist/
