@@ -1,6 +1,6 @@
 # hmrc-lib-upgrade
 
-TravisCI status: [![Build Status](https://travis-ci.org/thoeni/hmrc-lib-upgrade.svg?branch=v2.1.2)](https://travis-ci.org/thoeni/hmrc-lib-upgrade)
+TravisCI status: [![Build Status](https://travis-ci.org/thoeni/hmrc-lib-upgrade.svg?branch=master)](https://travis-ci.org/thoeni/hmrc-lib-upgrade)
 
 ## Usage
 
