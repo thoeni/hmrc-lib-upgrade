@@ -2,18 +2,19 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"regexp"
+	"sort"
+	"sync"
+	"sync/atomic"
+	"time"
+
 	"github.com/fatih/color"
 	"github.com/hashicorp/go-version"
 	"github.com/kyokomi/emoji"
-	"sync"
-	"time"
-	"flag"
-	"sort"
-	"sync/atomic"
 )
 
 type searchResp struct {
@@ -27,15 +28,19 @@ const (
 )
 
 var wg sync.WaitGroup
-var wgErr sync.WaitGroup
+var errWg sync.WaitGroup
 var remove map[string]interface{}
 var migration *bool
 var counter uint32
+
+// AppVersion is set by -ldflags at compile time
 var AppVersion string
+
+// Sha is set by -ldflags at compile time
 var Sha string
 
-var bintrayUrl = "https://api.bintray.com/packages/hmrc/releases/%s/versions/_latest"
-var nexusUrl = "https://nexus-dev.tax.service.gov.uk/content/repositories/hmrc-releases/uk/gov/hmrc/%s_2.11/"
+var bintrayURL = "https://api.bintray.com/packages/hmrc/releases/%s/versions/_latest"
+var nexusURL = "https://nexus-dev.tax.service.gov.uk/content/repositories/hmrc-releases/uk/gov/hmrc/%s_2.11/"
 
 func main() {
 
@@ -67,11 +72,11 @@ func main() {
 		Timeout: timeout,
 	}
 
-	var errors chan string = make(chan string)
-	var libs chan []string = make(chan []string)
-	var errs = make([]string, 0, 0)
+	var errIn = make(chan string)
+	var libs = make(chan []string)
+	var errOut = make([]string, 0, 0)
 
-	go errorProc(&errors, &errs, &wgErr)
+	go errorProc(&errIn, &errOut, &errWg)
 
 	go getLibraries(*filename, &libs)
 
@@ -81,21 +86,21 @@ func main() {
 
 	wg.Add(1)
 	for lib := range libs {
-		go getLatestVersion(&httpClient, lib, &errors, &wg)
+		go getLatestVersion(&httpClient, lib, &errIn, &wg)
 	}
 
 	wg.Done()
 	wg.Wait()
-	close(errors)
+	close(errIn)
 
 	fmt.Printf("|------------------------------|----------|----------|----------|------------|\n")
 	printHelp()
 	fmt.Printf("\nElapsed:%s\n", time.Since(start))
 
-	wgErr.Wait()
-	if len(errs) != 0 {
-		fmt.Println("\nErrors:\n")
-		for _, e := range errs {
+	errWg.Wait()
+	if len(errOut) != 0 {
+		fmt.Println("\nErrors:")
+		for _, e := range errOut {
 			fmt.Println(e)
 		}
 	}
@@ -134,24 +139,24 @@ func getLatestVersion(httpClient *http.Client, lib []string, errors *chan string
 	var resp = searchResp{}
 	var err error
 
-	var errId uint32
+	var errID uint32
 
 	resp, err = getFromBintray(httpClient, libName)
 	if err != nil {
-		errId = atomic.AddUint32(&counter, 1)
+		errID = atomic.AddUint32(&counter, 1)
 		if err.Error() == "[404]" {
 			resp, err = getFromNexus(httpClient, libName)
 		}
 		if err != nil {
-			*errors <- fmt.Sprintf("[%d] - %s [%s]\n\tCouldn't get version because of error %v", errId, libName, libCurVersion, err)
+			*errors <- fmt.Sprintf("[%d] - %s [%s]\n\tCouldn't get version because of error %v", errID, libName, libCurVersion, err)
 		}
 	}
 
-	printLine(libName, libCurVersion, resp, int(errId))
+	printLine(libName, libCurVersion, resp, int(errID))
 }
 
 func getFromBintray(httpClient *http.Client, libName string) (searchResp, error) {
-	url := fmt.Sprintf(bintrayUrl, libName)
+	url := fmt.Sprintf(bintrayURL, libName)
 	r, err := httpClient.Get(url)
 	if err != nil {
 		return searchResp{}, err
@@ -176,7 +181,7 @@ func getFromBintray(httpClient *http.Client, libName string) (searchResp, error)
 }
 
 func getFromNexus(httpClient *http.Client, libName string) (searchResp, error) {
-	url := fmt.Sprintf(nexusUrl, libName)
+	url := fmt.Sprintf(nexusURL, libName)
 	r, err := httpClient.Get(url)
 	if err != nil {
 		return searchResp{}, err
@@ -200,7 +205,7 @@ func parseLatestNexus(body []byte) (searchResp, error) {
 	m := r.FindAllStringSubmatch(c, -1)
 
 	if len(m) == 0 {
-		return searchResp{}, fmt.Errorf("No matches.")
+		return searchResp{}, fmt.Errorf("no matches")
 	}
 
 	versions := make([]*version.Version, len(m))
@@ -216,7 +221,7 @@ func parseLatestNexus(body []byte) (searchResp, error) {
 	}, nil
 }
 
-func printLine(libName string, libCurVersion string, resp searchResp, errId int) {
+func printLine(libName string, libCurVersion string, resp searchResp, errID int) {
 
 	libLatestVersion := resp.Name
 	libLatestUpdate, _ := time.Parse(dateLayout, resp.Updated)
@@ -234,7 +239,7 @@ func printLine(libName string, libCurVersion string, resp searchResp, errId int)
 	case *migration && exists:
 		color.Magenta("|%30s|%10s|%10s|%10s|%12s|\n", libName, libCurVersion, libLatestVersion, resp.Source, "")
 	case libLatestVersion == "":
-		color.Yellow("|%30s|%10s|%10s|%10s|%12s|\n", libName, libCurVersion, fmt.Sprintf("err[%d]", errId), "", "")
+		color.Yellow("|%30s|%10s|%10s|%10s|%12s|\n", libName, libCurVersion, fmt.Sprintf("err[%d]", errID), "", "")
 	case cV.LessThan(lV):
 		color.Red("|%30s|%10s|%10s|%10s|%12s|\n", libName, libCurVersion, libLatestVersion, resp.Source, updFmt)
 	default:

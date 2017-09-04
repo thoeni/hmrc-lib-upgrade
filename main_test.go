@@ -1,21 +1,21 @@
 package main
 
 import (
-	"testing"
-	"net/http"
 	"fmt"
-	"net/http/httptest"
-	"io/ioutil"
 	"github.com/stretchr/testify/assert"
+	"io/ioutil"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
+	"testing"
 )
 
 func TestGetFromBintray(t *testing.T) {
 
 	ts := startBintrayTestServer()
 	defer ts.Close()
-	bintrayUrl = ts.URL + "/%s"
+	bintrayURL = ts.URL + "/%s"
 
 	r, err := getFromBintray(http.DefaultClient, "exampleLib1")
 
@@ -29,7 +29,7 @@ func TestGetFromBintray_404(t *testing.T) {
 
 	ts := startBintrayTestServer()
 	defer ts.Close()
-	bintrayUrl = ts.URL + "/%s"
+	bintrayURL = ts.URL + "/%s"
 
 	_, err := getFromBintray(http.DefaultClient, "libNotFound")
 
@@ -40,7 +40,7 @@ func TestGetFromBintray_unmarshalErr(t *testing.T) {
 
 	ts := startBintrayTestServer()
 	defer ts.Close()
-	bintrayUrl = ts.URL + "/%s"
+	bintrayURL = ts.URL + "/%s"
 
 	_, err := getFromBintray(http.DefaultClient, "nilBody")
 
@@ -51,7 +51,7 @@ func TestGetFromNexus(t *testing.T) {
 
 	ts := startNexusTestServer()
 	defer ts.Close()
-	nexusUrl = ts.URL + "/%s"
+	nexusURL = ts.URL + "/%s"
 
 	r, err := getFromNexus(http.DefaultClient, "exampleLib2")
 
@@ -65,7 +65,7 @@ func TestGetFromNexus_404(t *testing.T) {
 
 	ts := startNexusTestServer()
 	defer ts.Close()
-	nexusUrl = ts.URL + "/%s"
+	nexusURL = ts.URL + "/%s"
 
 	_, err := getFromNexus(http.DefaultClient, "libNotFound")
 
@@ -76,7 +76,7 @@ func TestGetFromNexus_empty(t *testing.T) {
 
 	ts := startNexusTestServer()
 	defer ts.Close()
-	nexusUrl = ts.URL + "/%s"
+	nexusURL = ts.URL + "/%s"
 
 	_, err := getFromNexus(http.DefaultClient, "nilBody")
 
@@ -89,15 +89,16 @@ func TestGetLatestVersion(t *testing.T) {
 
 	bts := startBintrayTestServer()
 	defer bts.Close()
-	bintrayUrl = bts.URL + "/%s"
+	bintrayURL = bts.URL + "/%s"
 
 	nts := startNexusTestServer()
 	defer nts.Close()
-	nexusUrl = nts.URL + "/%s"
+	nexusURL = nts.URL + "/%s"
 
 	err := make(chan string)
 	go func() {
-		for _ = range err {}
+		for _ = range err {
+		}
 	}()
 
 	var wg sync.WaitGroup
