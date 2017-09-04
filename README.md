@@ -23,3 +23,5 @@ Under [GitHub Releases](https://github.com/thoeni/hmrc-lib-upgrade/releases) you
 ```
 hmrc-lib-upgrade -file=project/MicroServiceBuild.scala -migration
 ```
+
+![Zsh screenshot](https://raw.githubusercontent.com/thoeni/hmrc-lib-upgrade/master/images/screen.png)
