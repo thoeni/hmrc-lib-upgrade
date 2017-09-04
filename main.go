@@ -232,7 +232,7 @@ func printLine(libName string, libCurVersion string, resp searchResp, errId int)
 
 	switch {
 	case *migration && exists:
-		color.Magenta("|%30s|%10s|%10s|%10s|%12s|\n", libName, libCurVersion, libLatestVersion, resp.Source, updFmt)
+		color.Magenta("|%30s|%10s|%10s|%10s|%12s|\n", libName, libCurVersion, libLatestVersion, resp.Source, "")
 	case libLatestVersion == "":
 		color.Yellow("|%30s|%10s|%10s|%10s|%12s|\n", libName, libCurVersion, fmt.Sprintf("err[%d]", errId), "", "")
 	case cV.LessThan(lV):
