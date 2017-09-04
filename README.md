@@ -8,7 +8,7 @@ CircleCI build status: [![CircleCI](https://circleci.com/gh/thoeni/hmrc-lib-upgr
 - `-h` shows help
 - `-version` shows version and commit of the executable
 - `-file` allows to specify which `.*Build.scala` input file to use (you might have either `MicroServiceBuild.scala` or `FrontendBuild.scala`)
-- `-migration` will show libraries to be removed as part of [PlatOps migration](https://confluence.tools.tax.service.gov.uk/x/wJFhBQ)
+- `-migration` will show libraries to be removed as part of the upgrade to the latest version of bootstrap
 
 ### Build
 If you have the Go compiler, you can build with:

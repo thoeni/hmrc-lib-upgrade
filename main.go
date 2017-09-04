@@ -247,5 +247,5 @@ func printHelp() {
 	color.Green(emoji.Sprint(":smile: Library up to date!"))
 	color.Red(emoji.Sprint(":anguished: Auch! Not the latest..."))
 	color.Yellow(emoji.Sprint(":disappointed: Something went wrong! VPN issues??? If the library is on Nexus I need to access it..."))
-	color.Magenta(emoji.Sprint(":construction: To be removed for migration https://confluence.tools.tax.service.gov.uk/x/wJFhBQ"))
+	color.Magenta(emoji.Sprint(":construction: To be removed for upgrade to the latest version of bootstraps"))
 }
