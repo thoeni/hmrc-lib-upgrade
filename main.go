@@ -15,6 +15,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/hashicorp/go-version"
 	"github.com/kyokomi/emoji"
+	"github.com/spf13/viper"
 )
 
 type searchResp struct {
@@ -47,6 +48,7 @@ func main() {
 	start := time.Now()
 
 	filename := flag.String("file", "", "Filename to parse in the current dir, i.e. -file=MicroServiceBuild.scala")
+	config := flag.String("config", ".", "Path containing the configuration file (if required) to enumerate libraries to be removed, can be either relative or absolute")
 	printVersion := flag.Bool("version", false, "Prints the version of this application")
 	migration = flag.Bool("migration", false, "If present will highlight libraries to be removed for library upgrade")
 	flag.Parse()
@@ -61,13 +63,20 @@ func main() {
 		return
 	}
 
-	var migrationLibs = []string{"http-verbs", "play-auditing", "play-graphite", "play-config", "play-authorisation", "play-authorised-frontend", "play-health", "crypto", "logback-json-logger", "play-json-logger", "govuk-template", "play-ui"}
+	if err := initConfig(*config); err != nil && *migration {
+		fmt.Println("Something went wrong:", err)
+		fmt.Println("The location of the config file can be specified via the optional --config option")
+		return
+	}
+
+	var delLibs = viper.GetStringSlice("libs.delete")
+
 	remove = make(map[string]interface{})
-	for _, l := range migrationLibs {
+	for _, l := range delLibs {
 		remove[l] = nil
 	}
 
-	timeout := time.Duration(2 * time.Second)
+	timeout := time.Duration(5 * time.Second)
 	httpClient := http.Client{
 		Timeout: timeout,
 	}
@@ -104,6 +113,12 @@ func main() {
 			fmt.Println(e)
 		}
 	}
+}
+
+func initConfig(conf string) error {
+	viper.SetConfigName("config")
+	viper.AddConfigPath(conf)
+	return viper.ReadInConfig()
 }
 
 func errorProc(errCh *chan string, errors *[]string, wg *sync.WaitGroup) {
@@ -252,5 +267,7 @@ func printHelp() {
 	color.Green(emoji.Sprint(":smile: Library up to date!"))
 	color.Red(emoji.Sprint(":anguished: Auch! Not the latest..."))
 	color.Yellow(emoji.Sprint(":disappointed: Something went wrong! VPN issues??? If the library is on Nexus I need to access it..."))
-	color.Magenta(emoji.Sprint(":construction: To be removed for upgrade to the latest version of bootstraps"))
+	if *migration {
+		color.Magenta(fmt.Sprintf("%s To be removed for upgrade described by %s file", emoji.Sprint(":construction:"), viper.ConfigFileUsed()))
+	}
 }

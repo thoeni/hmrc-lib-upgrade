@@ -1,0 +1,6 @@
+// Example config file for migration to latest frontend bootstrap library
+{
+  "libs": {
+    "delete":["http-verbs", "play-auditing", "play-graphite", "play-config", "play-authorisation", "play-authorised-frontend", "play-health", "crypto", "logback-json-logger", "play-json-logger", "govuk-template", "play-ui"]
+  }
+}
